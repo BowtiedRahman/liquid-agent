@@ -69,11 +69,13 @@ export type Part = {
 
 export type Quant = { id: string; label: string; quant?: string; bytes: number; size: string; note?: string; onDisk?: boolean };
 
-export type CustomVariant = Quant & { file: string; quant: string; shards: string[]; recommended?: boolean };
+export type CustomVariant = Quant & { file: string; quant: string; shards: string[]; recommended?: boolean; local?: boolean };
 
 export type CustomModel = {
   repo: string;
   revision: string;
+  /** The model runs from a file on this computer instead of a download. */
+  local?: boolean;
   label: string;
   license?: string | null;
   licenseUrl?: string | null;

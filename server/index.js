@@ -260,6 +260,11 @@ route("POST", "/api/models/custom", async (req) => {
   const { link, file } = await json(req);
   return backends.setCustomModel(link, file);
 });
+route("POST", "/api/models/local", async (req) => {
+  const { files, file } = await json(req);
+  const paths = Array.isArray(files) ? files : [files];
+  return backends.addLocalModel(paths.filter((p) => typeof p === "string"), typeof file === "string" ? file : undefined);
+});
 route("POST", "/api/models/custom/quant", async (req) => {
   const { file } = await json(req);
   return backends.setCustomQuant(file);

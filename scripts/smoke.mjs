@@ -209,6 +209,23 @@ check(["engine", "small", "omni", "guardian", "browser"].every((id) => ids.inclu
 check(state.dataDir === home, "it keeps its files in the data folder it was given");
 check(state.routines.length > 0, "starter routines are there");
 
+// A model file on this computer is used where it is: nothing is copied into
+// the data folder, and a path that isn't a model is refused.
+const missing = await fetch(BASE + "/api/models/local", {
+  method: "POST",
+  headers: { "x-liquid-token": token, "Content-Type": "application/json" },
+  body: JSON.stringify({ files: [path.join(home, "nope.gguf")] }),
+});
+check(missing.status === 404, "it refuses a model file that isn't there");
+const local = await call("POST", "/api/models/local", { files: [fixtureFile] });
+check(local.custom?.local === true && local.custom.file === fixtureFile, "it runs a GGUF file from this computer");
+check(local.quants?.length === 1 && local.quants[0].onDisk === true, "the file shows up as a size it can run");
+check(!fs.existsSync(path.join(home, "models", "custom", path.basename(fixtureFile))), "it doesn't copy the file into its own folder");
+// The engine is missing here, so choosing a local model also queues it. Stop that before switching back.
+await call("POST", "/api/parts/cancel");
+await waitFor("the engine download to stop", (s) => !s.busy, 1);
+await call("DELETE", "/api/models/custom");
+
 if (MODELS) {
   await call("PATCH", "/api/settings", { smallQuant: "QAD-Q4_0" });
   await call("POST", "/api/parts/install", { ids: ["engine", "small"] });

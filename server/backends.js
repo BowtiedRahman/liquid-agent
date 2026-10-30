@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { DATA, DEVICE, DIRS, IS_MAC, QUANTS, ROOT, bus, bytesText, load, run, save, settings, sleep } from "./core.js";
-import { hfHeaders, modelError, probeGGUF, resolveHfModel } from "./models.js";
+import { hfHeaders, localVariants, modelError, probeGGUF, resolveHfModel } from "./models.js";
 import { linuxGPU, listeners } from "./platform.js";
 
 export const PARTS = {
@@ -101,7 +101,10 @@ const gb = (bytes) => `${(bytes / 1e9).toFixed(1)} GB`;
 const marker = (dir) => path.join(dir, ".ready");
 
 const isGguf = (name) => typeof name === "string" && /\.gguf$/i.test(name) && name.split("/").every((part) => part && part !== "." && part !== "..");
+/** A model file that stays where it is on this computer (Settings → Advanced). */
+const isGgufPath = (name) => typeof name === "string" && path.isAbsolute(name) && /\.gguf$/i.test(name);
 const customPath = (name) => {
+  if (isGgufPath(name)) return path.normalize(name);
   if (!isGguf(name)) throw modelError("That model file has an unsafe name.", 400);
   const full = path.join(CUSTOM_DIR, name);
   if (!full.startsWith(CUSTOM_DIR + path.sep)) throw modelError("That model file has an unsafe name.", 400);
@@ -114,25 +117,34 @@ const variantOnDisk = (variant) => Boolean(variant) && variant.shards.every((sha
 function cleanCustom(raw) {
   if (!raw || typeof raw !== "object" || typeof raw.repo !== "string" || typeof raw.file !== "string" || !Array.isArray(raw.variants)) return null;
   const variants = raw.variants
-    .filter((v) => v && typeof v.id === "string" && typeof v.file === "string" && Array.isArray(v.shards) && v.shards.length > 0 && v.shards.every(isGguf) && typeof v.bytes === "number")
-    .slice(0, 100)
-    .map((v) => ({
-      id: v.id,
-      file: v.file,
-      quant: typeof v.quant === "string" ? v.quant : "GGUF",
-      bytes: v.bytes,
-      shards: v.shards,
-      shardBytes: Array.isArray(v.shardBytes) ? v.shardBytes.filter((n) => typeof n === "number") : undefined,
-      label: typeof v.label === "string" ? v.label : "Balanced",
-      ...(typeof v.note === "string" ? { note: v.note } : {}),
-    }));
+    .map((v) => {
+      if (!v || typeof v.id !== "string" || typeof v.file !== "string" || !Array.isArray(v.shards) || v.shards.length === 0) return null;
+      // A model from Hugging Face is downloaded into the app's own folder; one from this
+      // computer stays where it is, so its shards are absolute paths.
+      const local = v.local === true;
+      if (!v.shards.every(local ? isGgufPath : isGguf) || typeof v.bytes !== "number") return null;
+      return {
+        id: v.id,
+        file: v.file,
+        quant: typeof v.quant === "string" ? v.quant : "GGUF",
+        bytes: v.bytes,
+        shards: v.shards,
+        shardBytes: Array.isArray(v.shardBytes) ? v.shardBytes.filter((n) => typeof n === "number") : undefined,
+        label: typeof v.label === "string" ? v.label : "Balanced",
+        ...(local ? { local: true } : {}),
+        ...(typeof v.note === "string" ? { note: v.note } : {}),
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 100);
   const selected = variants.find((v) => v.id === raw.file);
   if (!variants.length || !selected) return null;
   return {
     ...selected,
     repo: raw.repo,
     revision: typeof raw.revision === "string" ? raw.revision : "main",
-    label: typeof raw.label === "string" ? raw.label : raw.repo.split("/").pop(),
+    // A model from this computer is named after the file that's actually loaded.
+    label: selected.local ? selected.label : typeof raw.label === "string" ? raw.label : raw.repo.split("/").pop(),
     license: typeof raw.license === "string" ? raw.license : null,
     licenseUrl: typeof raw.licenseUrl === "string" ? raw.licenseUrl : null,
     addedAt: typeof raw.addedAt === "number" ? raw.addedAt : Date.now(),
@@ -272,9 +284,10 @@ class Backends {
       if (id === "engine") return { ...part, ...this.engineInfo };
       if (id === "small" && this.custom) {
         const custom = this.custom;
+        const where = custom.local ? `on this ${DEVICE}` : custom.repo;
         return {
           ...part,
-          detail: `${custom.label} · ${custom.repo}${custom.meta?.hasTemplate === false ? " · no chat template" : ""}`,
+          detail: `${custom.label} · ${where}${custom.meta?.hasTemplate === false ? " · no chat template" : ""}`,
           size: gb(custom.bytes),
           bytes: custom.bytes,
           quant: custom.file,
@@ -288,6 +301,7 @@ class Backends {
             quant: custom.quant,
             bytes: custom.bytes,
             meta: custom.meta,
+            local: Boolean(custom.local),
           },
           quants: custom.variants.map((v) => ({
             id: v.id,
@@ -412,6 +426,40 @@ class Backends {
     return this.snapshot().find((p) => p.id === "small");
   }
 
+  /**
+   * Replaces the Everyday brain with GGUF files already on this computer. The
+   * files are used where they are: nothing is downloaded, copied or deleted.
+   */
+  addLocalModel(paths, file) {
+    if (this.busy) throw modelError("Wait for the current download to finish, then add the model.", 409);
+    const { variants } = localVariants(paths);
+    const variant = variants.find((v) => v.id === file) ?? variants.find((v) => v.id === path.resolve(String(file ?? ""))) ?? variants[0];
+    if (!variant) throw modelError("Pick a GGUF file on this computer.", 400);
+    this.stop("small");
+    const next = cleanCustom({
+      repo: "local",
+      revision: "local",
+      label: variant.label,
+      license: null,
+      licenseUrl: null,
+      variants,
+      file: variant.file,
+      quant: variant.quant,
+      bytes: variant.bytes,
+      shards: variant.shards,
+      shardBytes: variant.shardBytes,
+      addedAt: Date.now(),
+      meta: null,
+    });
+    if (!next) throw modelError("That model's files couldn't be used.", 422);
+    this.custom = next;
+    save(CUSTOM_FILE, this.custom);
+    this.refresh();
+    this.emit();
+    this.install(["small"]).catch(() => {});
+    return this.snapshot().find((p) => p.id === "small");
+  }
+
   /** Switches to another size of the same custom model. */
   setCustomQuant(file) {
     if (this.busy) throw modelError("Wait for the current download to finish, then change the size.", 409);
@@ -446,9 +494,11 @@ class Backends {
     if (this.busy) throw modelError("Wait for the current download to finish, then switch back.", 409);
     if (!this.custom) return this.snapshot().find((p) => p.id === "small");
     this.stop("small");
+    const local = Boolean(this.custom.local);
     this.custom = null;
     fs.rmSync(path.join(DATA, CUSTOM_FILE), { force: true });
-    fs.rmSync(CUSTOM_DIR, { recursive: true, force: true });
+    // A model from this computer isn't the app's to delete.
+    if (!local) fs.rmSync(CUSTOM_DIR, { recursive: true, force: true });
     this.refresh();
     this.emit();
     if (this.installed("small")) this.start("small");
@@ -574,34 +624,36 @@ class Backends {
   async installCustom(signal) {
     const custom = this.custom;
     const variant = variantOf(custom);
-    if (!custom || !variant) throw modelError("No model from Hugging Face is selected.", 400);
-    fs.mkdirSync(CUSTOM_DIR, { recursive: true });
-    for (const shard of variant.shards) fs.mkdirSync(path.dirname(customPath(shard)), { recursive: true });
-    const sizes = variant.shardBytes?.length === variant.shards.length ? variant.shardBytes : variant.shards.map(() => 0);
-    const total = sizes.reduce((sum, n) => sum + n, 0) || variant.bytes || 0;
+    if (!custom || !variant) throw modelError("No model is selected.", 400);
     const live = this.states.small?.live === true;
-    const repo = custom.repo.split("/").map(encodeURIComponent).join("/");
-    const revision = encodeURIComponent(custom.revision || "main");
-    let base = 0;
-    for (let i = 0; i < variant.shards.length; i++) {
-      const shard = variant.shards[i];
-      const dest = customPath(shard);
-      const name = shard.split("/").map(encodeURIComponent).join("/");
-      const label = `Downloading ${variant.quant}`;
-      await download(`https://huggingface.co/${repo}/resolve/${revision}/${name}`, dest, {
-        signal,
-        headers: hfHeaders(),
-        onProgress: (done) => {
-          const soFar = base + done;
-          this.set("small", {
-            status: "installing",
-            live,
-            text: total ? `${label} ${bytesText(soFar)} of ${bytesText(total)}` : `${label} ${bytesText(soFar)}`,
-            fraction: total ? Math.min(1, soFar / total) : undefined,
-          });
-        },
-      });
-      base += sizes[i] || fs.statSync(dest).size;
+    if (!variant.local) {
+      fs.mkdirSync(CUSTOM_DIR, { recursive: true });
+      for (const shard of variant.shards) fs.mkdirSync(path.dirname(customPath(shard)), { recursive: true });
+      const sizes = variant.shardBytes?.length === variant.shards.length ? variant.shardBytes : variant.shards.map(() => 0);
+      const total = sizes.reduce((sum, n) => sum + n, 0) || variant.bytes || 0;
+      const repo = custom.repo.split("/").map(encodeURIComponent).join("/");
+      const revision = encodeURIComponent(custom.revision || "main");
+      let base = 0;
+      for (let i = 0; i < variant.shards.length; i++) {
+        const shard = variant.shards[i];
+        const dest = customPath(shard);
+        const name = shard.split("/").map(encodeURIComponent).join("/");
+        const label = `Downloading ${variant.quant}`;
+        await download(`https://huggingface.co/${repo}/resolve/${revision}/${name}`, dest, {
+          signal,
+          headers: hfHeaders(),
+          onProgress: (done) => {
+            const soFar = base + done;
+            this.set("small", {
+              status: "installing",
+              live,
+              text: total ? `${label} ${bytesText(soFar)} of ${bytesText(total)}` : `${label} ${bytesText(soFar)}`,
+              fraction: total ? Math.min(1, soFar / total) : undefined,
+            });
+          },
+        });
+        base += sizes[i] || fs.statSync(dest).size;
+      }
     }
     this.set("small", { status: "installing", live, text: "Checking the model…", fraction: 1 });
     const meta = probeGGUF(customPath(variant.file));
@@ -617,7 +669,8 @@ class Backends {
     if (!next) throw modelError("That model's files couldn't be used.", 422);
     this.custom = next;
     save(CUSTOM_FILE, this.custom);
-    pruneCustom(variant.shards);
+    // A model from this computer lives outside the app's folder, so there's nothing to prune.
+    if (!variant.local) pruneCustom(variant.shards);
   }
 
   /** The engine row's text: what it runs on, and a bigger size for CUDA. */
@@ -747,9 +800,10 @@ class Backends {
         break;
       case "small":
         if (this.custom) {
+          const local = Boolean(this.custom.local);
           this.custom = null;
           fs.rmSync(path.join(DATA, CUSTOM_FILE), { force: true });
-          fs.rmSync(CUSTOM_DIR, { recursive: true, force: true });
+          if (!local) fs.rmSync(CUSTOM_DIR, { recursive: true, force: true });
         } else {
           this.pruneQuants(id, { all: true });
         }

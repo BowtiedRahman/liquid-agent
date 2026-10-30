@@ -11,6 +11,7 @@ import {
   Eye,
   FolderOpen,
   Globe,
+  HardDrive,
   Link2,
   Monitor,
   Moon,
@@ -491,17 +492,22 @@ function Downloads() {
   );
 }
 
-/** Swaps the Everyday brain for a GGUF model from Hugging Face. Lives in Advanced, away from Downloads and first-run setup. */
+/** Swaps the Everyday brain for a GGUF model from Hugging Face or a file on this computer. Lives in Advanced, away from Downloads and first-run setup. */
 function EverydayModel() {
   const part = useStore((s) => s.parts.find((p) => p.id === "small"));
   const busy = useStore((s) => s.busy);
   const [open, setOpen] = useState(false);
+  const [local, setLocal] = useState(false);
   if (!part) return null;
   const custom = part.custom;
   const changing = busy || part.status === "installing" || part.status === "starting";
   const useBuiltIn = () => {
-    if (!confirm(`Stop using ${custom?.label ?? "this model"}? Its download will be removed and the built-in LFM3 1.7B will be used.`)) return;
+    if (!confirm(`Stop using ${custom?.label ?? "this model"}? ${custom?.local ? "The file stays where it is" : "Its download will be removed"} and the built-in LFM3 1.7B will be used.`)) return;
     api("DELETE", "/api/models/custom").catch(errorToast);
+  };
+  const close = () => {
+    setOpen(false);
+    setLocal(false);
   };
   return (
     <>
@@ -509,21 +515,87 @@ function EverydayModel() {
         title="Everyday brain model"
         detail={
           custom
-            ? `${custom.label} · huggingface.co/${custom.repo}${custom.license ? ` · ${custom.license}` : ""}`
-            : "The built-in LFM3 1.7B. You can run a GGUF model from Hugging Face instead."
+            ? `${custom.label} · ${custom.local ? `on this ${DEVICE}` : `huggingface.co/${custom.repo}`}${custom.license ? ` · ${custom.license}` : ""}`
+            : "The built-in LFM3 1.7B. You can run a GGUF model from Hugging Face or from this computer instead."
         }
       >
-        <button className="btn" disabled={changing} onClick={() => setOpen(true)}>
-          <Link2 size={13} /> {custom ? "Change" : "Use a model from Hugging Face"}
-        </button>
+        {custom?.local ? (
+          <button className="btn" disabled={changing} onClick={() => setLocal(true)}>
+            <HardDrive size={13} /> Change file
+          </button>
+        ) : (
+          <>
+            <button className="btn" disabled={changing} onClick={() => setOpen(true)}>
+              <Link2 size={13} /> {custom ? "Change" : "Use a model from Hugging Face"}
+            </button>
+            <button className="btn" disabled={changing} onClick={() => setLocal(true)}>
+              <HardDrive size={13} /> Use a file on this {DEVICE}
+            </button>
+          </>
+        )}
         {custom && (
           <button className="btn" disabled={changing} onClick={useBuiltIn}>
             Use built-in
           </button>
         )}
       </Row>
-      {open && <CustomModelModal part={part} onClose={() => setOpen(false)} />}
+      {open && <CustomModelModal part={part} onClose={close} />}
+      {local && <LocalModelModal part={part} onClose={close} />}
     </>
+  );
+}
+
+/** Runs GGUF files that are already on this computer: nothing is downloaded or copied. */
+function LocalModelModal({ part, onClose }: { part: Part; onClose: () => void }) {
+  const custom = part.custom;
+  const [paths, setPaths] = useState(custom?.local ? custom.file : "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const add = async () => {
+    const files = paths
+      .split(/[\n,;]+/)
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (!files.length || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api("POST", "/api/models/local", { files });
+      toast("Switched the Everyday brain. It starts answering in a moment.");
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="Use a model on this computer"
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn primary" disabled={!paths.trim() || busy} onClick={add}>
+            <Play size={13} /> Use these models
+          </button>
+        </>
+      }
+    >
+      <p className="muted">
+        Point Liquid Agent at one or more GGUF files you already have, or at a folder of them (one path per line). They run from where they are, with nothing downloaded or copied. Pick between them afterwards in Downloads → Size.
+      </p>
+      <div className="notice">A model you add hasn't been tested with Liquid Agent's tools. While it's answering, Full Auto works like Approve for Me: Auto 200M checks each action first.</div>
+      <label className="field">
+        <span>Path to a GGUF file or folder</span>
+        <textarea rows={3} value={paths} onChange={(e) => setPaths(e.target.value)} placeholder={`/home/you/models/LFM3-1.7B-Q4_K_M.gguf`} autoFocus />
+      </label>
+      {error && <div className="notice bad">{error}</div>}
+    </Modal>
   );
 }
 

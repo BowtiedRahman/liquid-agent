@@ -3,6 +3,8 @@
 // adds a model or starts one for the first time.
 
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const HF_HOSTS = new Set(["huggingface.co", "www.huggingface.co", "hf.co"]);
 const REPO = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -159,6 +161,82 @@ export function ggufVariants(files, memoryGB = 8) {
     if (variant.shards.length > 1) variant.note = `${variant.shards.length} parts`;
   }
   return { variants, recommended, warnings };
+}
+
+/** `~/models`, relative paths and folders are all fine to type in Settings. */
+function localFile(input) {
+  const text = String(input ?? "").trim();
+  if (!text) throw modelError("Type the path to a GGUF file.", 400);
+  const home = os.homedir();
+  const full = path.resolve(text === "~" || text.startsWith("~/") ? path.join(home, text.slice(1)) : text);
+  let stat;
+  try {
+    stat = fs.statSync(full);
+  } catch {
+    throw modelError(`${full} isn't on this computer.`, 404);
+  }
+  if (stat.isDirectory()) {
+    const found = fs
+      .readdirSync(full)
+      .filter((name) => /\.gguf$/i.test(name))
+      .sort()
+      .map((name) => path.join(full, name));
+    if (!found.length) throw modelError(`There are no GGUF files in ${full}.`, 404);
+    return found.flatMap(localFile);
+  }
+  if (!/\.gguf$/i.test(full)) throw modelError(`${full} isn't a GGUF model.`, 400);
+  return [full];
+}
+
+/**
+ * Turns GGUF files already on this computer into the same size list Settings
+ * shows for a Hugging Face model. Nothing is downloaded or copied: the model
+ * runs straight from where it is, so deleting it from the app can't lose it.
+ */
+export function localVariants(inputs) {
+  const files = (Array.isArray(inputs) ? inputs : [inputs]).flatMap(localFile);
+  const singles = [];
+  const groups = new Map();
+  for (const file of files) {
+    const shard = path.basename(file).match(SHARD);
+    if (!shard) {
+      singles.push([file]);
+      continue;
+    }
+    const key = path.join(path.dirname(file), shard[1]);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ file, index: Number(shard[2]), total: Number(shard[3]) });
+  }
+  const sets = [...singles];
+  for (const [key, parts] of groups) {
+    const total = parts[0].total;
+    const indexes = new Set(parts.map((p) => p.index));
+    const complete = parts.length === total && parts.every((p) => p.total === total) && [...Array(total)].every((_, i) => indexes.has(i + 1));
+    if (!complete) throw modelError(`${path.basename(key)} is missing one or more parts, so it can't be used.`, 422);
+    sets.push([...parts].sort((a, b) => a.index - b.index).map((p) => p.file));
+  }
+  const variants = sets.map((shards) => {
+    const file = shards[0];
+    const shardBytes = shards.map((shard) => fs.statSync(shard).size);
+    const bytes = shardBytes.reduce((sum, n) => sum + n, 0);
+    const name = path.basename(file).replace(/-00001-of-\d{5}\.gguf$/i, "").replace(/\.gguf$/i, "");
+    const quant = quantOf(name);
+    // "LFM3-1.7B-Q4_K_M" reads better as "LFM3-1.7B" with Q4_K_M in its own column.
+    const label = name.replace(new RegExp(`[\\s._-]*${quant.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"), "") || name;
+    return {
+      id: file,
+      file,
+      quant,
+      bytes,
+      shards,
+      shardBytes,
+      local: true,
+      label,
+      note: "on this computer",
+    };
+  });
+  for (const variant of variants) probeGGUF(variant.file);
+  return { variants: variants.sort((a, b) => a.bytes - b.bytes) };
 }
 
 async function getJson(url, { fetchImpl, token }) {

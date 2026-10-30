@@ -68,6 +68,8 @@ Files live in `~/Library/Application Support/LiquidAgent` on macOS and `~/.local
 
 **Advanced: your own model.** Settings → Advanced → Everyday brain model → **Use a model from Hugging Face** takes a link such as `https://huggingface.co/<org>/<model>-GGUF`. Liquid Agent reads the repository's GGUF list, groups split files, picks a size that should fit this computer, checks the GGUF header and chat template, and runs it on the same llama.cpp engine. A `blob` link to one `.gguf` file preselects that file. Public repositories work directly; for a gated or private one, accept its terms on Hugging Face and set `HF_TOKEN` (or `HUGGING_FACE_HUB_TOKEN`) before starting Liquid Agent. Only text GGUF models are used here; vision/audio projectors are skipped. Switch back to the built-in LFM3 1.7B at any time. A model you add hasn't been tested with Liquid Agent's tools, so while it answers, Full Auto works like Approve for Me and Auto 200M checks each action.
 
+**Advanced: a model you already have.** Settings → Advanced → **Use a file on this computer** takes a path to a `.gguf` file, or to a folder of them, such as `~/models`. The files are checked and then run where they are: nothing is downloaded, copied into Liquid Agent's folder or deleted when you switch back, and the app still only needs the llama.cpp engine. Give it several files and pick between them in Settings → Downloads → Everyday brain → **Size**. Anything bigger than this computer's memory will be slow; a model whose template has no thinking mode answers straight away.
+
 ## How it works
 
 ```
