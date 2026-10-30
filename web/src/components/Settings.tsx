@@ -13,6 +13,7 @@ import {
   Globe,
   HardDrive,
   Link2,
+  Mic,
   Monitor,
   Moon,
   Play,
@@ -599,6 +600,48 @@ function LocalModelModal({ part, onClose }: { part: Part; onClose: () => void })
   );
 }
 
+/** Dictation with a speech model already on this computer: Handy's command line runs it. */
+function DictationModel({ settings }: { settings: SettingsType }) {
+  const dictation = useStore((s) => s.dictation);
+  const omniUp = useStore((s) => s.parts.find((p) => p.id === "omni")?.status === "running");
+  const [checking, setChecking] = useState(false);
+  const chosen = dictation.models.find((m) => m.id === settings.dictationModel) ?? dictation.models.find((m) => m.id === dictation.model);
+  const detail = dictation.ok
+    ? `${chosen?.label ?? "Handy's own choice"}${chosen?.size ? ` · ${chosen.size} MB` : ""} · runs where it is${omniUp ? " (Eyes and ears is used first)" : ""}`
+    : omniUp
+      ? "Eyes and ears transcribes your voice. A speech model here answers when it's stopped."
+      : dictation.note || "No speech model found on this computer.";
+  const check = async () => {
+    setChecking(true);
+    try {
+      const info = await api<{ ok: boolean; note?: string; models: { label: string }[] }>("GET", "/api/dictation");
+      toast(info.ok ? `Dictation ready: ${info.models[0]?.label ?? "model found"}.` : info.note || "No dictation program found.", info.ok ? "info" : "error");
+    } catch (e) {
+      errorToast(e);
+    } finally {
+      setChecking(false);
+    }
+  };
+  return (
+    <Row title="Dictation on this computer" detail={detail}>
+      {dictation.ok && dictation.models.length > 1 && (
+        <select className="input" value={settings.dictationModel || dictation.model} onChange={(e) => patch({ dictationModel: e.target.value })}>
+          {dictation.models.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+              {m.size ? ` · ${m.size} MB` : ""}
+            </option>
+          ))}
+        </select>
+      )}
+      <SavedInput value={settings.dictationBinary} placeholder="handy" width={200} onSave={(dictationBinary) => patch({ dictationBinary })} />
+      <button className="btn" disabled={checking} onClick={check}>
+        <Mic size={13} /> {checking ? "Checking…" : "Check"}
+      </button>
+    </Row>
+  );
+}
+
 function Advanced({ settings }: { settings: SettingsType }) {
   const num = (key: keyof SettingsType, min: number, max: number) => (v: string) => {
     const n = Number(v);
@@ -609,6 +652,7 @@ function Advanced({ settings }: { settings: SettingsType }) {
     <>
       <h3>Advanced</h3>
       <EverydayModel />
+      <DictationModel settings={settings} />
       <Row title="Memory for each chat" detail="How many tokens of the conversation go to the model. Smaller is faster.">
         <SavedInput type="number" width={110} value={String(settings.contextBudget)} onSave={num("contextBudget", 1000, 14000)} />
       </Row>

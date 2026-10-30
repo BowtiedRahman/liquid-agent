@@ -117,6 +117,12 @@ try {
 }
 check(/projector/.test(projector), "it refuses a vision or audio projector on its own");
 
+// Handy's logs go to stderr, but take the last JSON object in case some reach stdout.
+process.env.LIQUID_AGENT_HOME ??= home;
+const { readTranscription } = await import("../server/asr.js");
+const said = readTranscription('{"audio_secs":3}\nnoise\n{"text":"  hello there  ","model":"canary","best_ms":772}\n');
+check(said.text === "hello there" && said.ms === 772, "it reads the transcription out of the dictation program's output");
+
 /** Sends raw bytes and returns the response, for uploads and audio. */
 async function send(route, data, type, headers = {}) {
   const res = await fetch(BASE + route, { method: "POST", headers: { "x-liquid-token": token, "Content-Type": type, ...headers }, body: data });

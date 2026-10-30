@@ -98,6 +98,10 @@ export const DEFAULTS = {
   temperature: 0.3,
   smallQuant: "Q4_K_M",
   omniQuant: "Q4_K_M",
+  // Dictation with a speech model on this computer (Handy's command line). Empty
+  // means "the handy on PATH" and "whatever model Handy has selected".
+  dictationBinary: "",
+  dictationModel: "",
   smallURL: "http://127.0.0.1:8180/v1",
   omniURL: "http://127.0.0.1:8181/v1",
   guardianURL: "http://127.0.0.1:8766",

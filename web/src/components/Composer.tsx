@@ -49,7 +49,7 @@ export function fill(text: string) {
 }
 
 export function Composer({ chat, autoFocus }: { chat?: Chat; autoFocus?: boolean }) {
-  const { running, settings, parts, guardianWanted } = useStore();
+  const { running, settings, parts, guardianWanted, dictation } = useStore();
   const guardian = parts.find((p) => p.id === "guardian");
   const customBrain = parts.find((p) => p.id === "small")?.custom;
   // The draft survives a reload, such as the one after the server restarts.
@@ -71,6 +71,7 @@ export function Composer({ chat, autoFocus }: { chat?: Chat; autoFocus?: boolean
   const mic = useRef<{ mic: Microphone; chunks: Int16Array[]; started: number } | null>(null);
   const busy = chat ? running.includes(chat.id) : false;
   const omniUp = part(parts, "omni")?.status === "running";
+  const canDictate = omniUp || dictation.ok;
 
   const keepDraft = useCallback(
     (value: string) => {
@@ -212,7 +213,7 @@ export function Composer({ chat, autoFocus }: { chat?: Chat; autoFocus?: boolean
   }
 
   async function startDictation() {
-    if (!omniUp) return toast("Dictation needs Eyes and ears. Set it up in Settings → Downloads.", "error");
+    if (!canDictate) return toast(dictation.note ? `Dictation isn't ready. ${dictation.note}` : "Dictation needs Eyes and ears, or Handy with a speech model. Set it up in Settings → Downloads.", "error");
     const chunks: Int16Array[] = [];
     const m = new Microphone(16000, (f) => {
       chunks.push(f.pcm);

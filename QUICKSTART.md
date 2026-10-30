@@ -92,14 +92,28 @@ What you still need: the llama.cpp engine (**~30 MB**, installed from *Settings 
 
 ## Voice, pictures and your screen
 
-These all go through **Eyes and ears** (LFM3 Omni 2B, **Downloads → Get**), which listens, thinks and talks back in one model:
+These go through **Eyes and ears** (LFM3 Omni 2B, **Downloads → Get**), which listens, thinks and talks back in one model — except dictation, which can also use a speech model you already have:
 
 - **Voice chat** — hold a conversation; talk over it to interrupt. Turn the camera on and it also sees what you show it.
 - **Dictate** — the microphone in the composer turns speech into text.
 - **Read answers aloud** — enable it in Settings → Voice, or press the speaker on a message.
 - **Pictures and your screen** — attach an image or ask it to look at your screen.
 
-Without Eyes and ears, chat still works; the voice buttons answer with a short error. On Linux, audio and microphone additionally need `ffmpeg` (and a working PulseAudio/PipeWire input).
+Without Eyes and ears, chat still works; voice chat and read-aloud answer with a short error. On Linux, audio and microphone additionally need `ffmpeg` (and a working PulseAudio/PipeWire input).
+
+### Dictation with a speech model you already have
+
+**Dictate** works without Eyes and ears if [Handy](https://handy.computer) is installed and has a speech model (Canary, Whisper-family GGUFs, Parakeet). Liquid Agent runs Handy's own headless command line (`handy --transcribe-file … --json`), so the model stays where Handy keeps it: nothing is downloaded, converted or copied.
+
+1. Install Handy and download a speech model inside it once (`handy-app` → Settings → Models). Canary 180M Flash is a good pick: 208 MB, roughly 4× faster than real time on a 2-core laptop.
+2. Liquid Agent finds `handy` on your `PATH` by itself. If it lives somewhere else, put the path in **Settings → Advanced → Dictation on this computer** and press **Check**.
+3. Hotkey to record, or click the microphone in the composer; the text appears in the box.
+
+Notes:
+
+- With more than one model installed in Handy, the same row lets you pick which one Liquid Agent uses. Leaving it alone uses whichever model Handy has selected.
+- If **Eyes and ears** is running, it transcribes instead — it hears longer, messier audio better. Stop it in Downloads to hand dictation back to the local model.
+- Voice chat and read-aloud still need Eyes and ears: they are a single model listening and talking at once, which a transcribe-only model can't do.
 
 ## Make it faster
 
@@ -139,7 +153,7 @@ Useful environment variables:
 - **Voice** — voice, read answers aloud, microphone.
 - **Safety** — approval mode and the safety helper.
 - **Downloads** — every part: **AI engine**, **Everyday brain**, **Eyes and ears**, **Safety helper**, **Web helper**. Each row has its size picker, Start/Stop, and Remove. `Get everything` fills in what's missing.
-- **Advanced** — the Everyday brain model (built-in, from Hugging Face, or a file on this computer), context budget, tool output kept, most steps per answer, creativity, delete all chats.
+- **Advanced** — the Everyday brain model (built-in, from Hugging Face, or a file on this computer), dictation with a program on this computer, context budget, tool output kept, most steps per answer, creativity, delete all chats.
 
 ## Troubleshooting
 
@@ -149,7 +163,7 @@ Useful environment variables:
 
 **Answers are correct but slow.** See [Make it faster](#make-it-faster). An old GPU whose driver reports incomplete Vulkan support (for example Intel Ivy Bridge) is not usable by llama.cpp; run the CPU build.
 
-**The microphone or read-aloud does nothing.** Those need Eyes and ears, plus `ffmpeg` on Linux.
+**The microphone does nothing.** Dictation needs **Eyes and ears**, or Handy with a speech model (see [Dictation with a speech model you already have](#dictation-with-a-speech-model-you-already-have)). Check the row in **Settings → Advanced**; if it says *There's no dictation program at …*, fix the path or install Handy. Read-aloud always needs Eyes and ears. On Linux, audio additionally needs `ffmpeg` and a PulseAudio/PipeWire input.
 
 **A tool action never runs.** It is probably waiting for approval — look at the approval dock in the composer, or switch to a different mode in Settings → Safety. Commands that could wipe data always ask, even in Full Auto.
 

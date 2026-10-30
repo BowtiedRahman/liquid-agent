@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { socketURL, token } from "./api";
-import type { ActivityEntry, Chat, Idea, Part, Reminder, Routine, Settings, Snapshot, Step, Update } from "./types";
+import type { ActivityEntry, Chat, Dictation, Idea, Part, Reminder, Routine, Settings, Snapshot, Step, Update } from "./types";
 
 export type Toast = { id: number; text: string; tone?: "error" | "info" };
 export type Route =
@@ -26,6 +26,8 @@ type State = {
   busy: boolean;
   guardianWanted: boolean;
   machine: { memoryGB: number };
+  /** What the microphone can use: Eyes and ears, or a speech model on this computer. */
+  dictation: Dictation;
   memory: string[];
   ideas: { at: number; items: Idea[] };
   routines: Routine[];
@@ -52,6 +54,7 @@ export const useStore = create<State>(() => ({
   busy: false,
   guardianWanted: false,
   machine: { memoryGB: 0 },
+  dictation: { ok: false, binary: "", model: "", models: [], note: "" },
   memory: [],
   ideas: { at: 0, items: [] },
   routines: [],
@@ -145,6 +148,7 @@ type Event =
   | { type: "running"; running: string[] }
   | { type: "parts"; parts: Part[]; busy: boolean; guardianWanted: boolean }
   | { type: "settings"; settings: Settings }
+  | { type: "dictation"; dictation: Dictation }
   | { type: "update"; update: Update }
   | { type: "memory"; facts: string[] }
   | { type: "ideas"; ideas: { at: number; items: Idea[] } }
@@ -179,6 +183,9 @@ function onEvent(e: Event) {
       break;
     case "settings":
       set({ settings: e.settings });
+      break;
+    case "dictation":
+      set({ dictation: e.dictation });
       break;
     case "update":
       set({ update: e.update });

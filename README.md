@@ -10,6 +10,7 @@ A private AI agent for your Mac or Linux computer that runs **LFM3 1.7B** and **
 - **Three safety modes**: *Ask for Approval*, *Approve for Me* and *Full Auto*. Approve for Me needs the [Auto 200M INT4](https://huggingface.co/ProCreations/auto-200m-2-int4) classifier, which approves safe actions and asks you about the rest; picking it downloads Auto 200M first. Commands that could wipe data always ask.
 - **Memory and For You**: it learns small facts about you, uses only the relevant ones (to keep prompts short) and suggests ideas based on them.
 - **Routines** you can run with one click or on a schedule, and an **Activity** log of every action and who approved it.
+- **Dictation without LFM3 Omni**: if [Handy](https://handy.computer) is installed with a speech model (Canary, Whisper-family GGUFs, Parakeet), the microphone uses that model instead — it runs from where Handy put it, and Settings → Advanced shows which one.
 - **One-click downloads** inside the app, with a choice of model size (Smaller, Balanced, Best, or any GGUF quant in Settings). The app still routes each message itself.
 
 Everything stays on your computer. The only network traffic is the one-time downloads and web searches you ask for.

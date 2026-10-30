@@ -116,6 +116,8 @@ export type Settings = {
   temperature: number;
   smallQuant: string;
   omniQuant: string;
+  dictationBinary: string;
+  dictationModel: string;
   smallURL: string;
   omniURL: string;
   guardianURL: string;
@@ -163,6 +165,14 @@ export type Update = {
   checkedAt: number;
 };
 
+export type Dictation = {
+  ok: boolean;
+  binary: string;
+  model: string;
+  models: { id: string; label: string; size: number }[];
+  note?: string;
+};
+
 export type Snapshot = {
   chats: Chat[];
   running: string[];
@@ -171,6 +181,7 @@ export type Snapshot = {
   busy: boolean;
   guardianWanted: boolean;
   machine: { memoryGB: number };
+  dictation: Dictation;
   memory: string[];
   ideas: { at: number; items: Idea[] };
   routines: Routine[];

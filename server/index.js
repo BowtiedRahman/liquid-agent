@@ -15,6 +15,7 @@ import { routineStore } from "./routines.js";
 import { cancelReminder, reminderList } from "./tools.js";
 import { MAX_UPLOAD, uploads } from "./uploads.js";
 import { speak, transcribe } from "./omni.js";
+import { cachedDictation, dictationInfo, localTranscribe } from "./asr.js";
 import { handleVoice } from "./voice.js";
 import { BUILD, updater } from "./updater.js";
 
@@ -114,6 +115,7 @@ function snapshot() {
     busy: backends.busy,
     guardianWanted: backends.guardianWanted,
     machine: backends.machine,
+    dictation: cachedDictation(),
     memory: memory.facts,
     ideas: memory.ideas,
     routines: routineStore.list,
@@ -169,9 +171,12 @@ route("POST", "/api/uploads", async (req) => {
 
 route("POST", "/api/transcribe", async (req) => {
   const wav = await body(req, MAX_UPLOAD);
-  if (!backends.running("omni")) throw new HttpError(503, "Dictation needs Eyes and ears. Set it up in Settings → Downloads.");
-  return { text: await transcribe(wav) };
+  // Eyes and ears hears best, but a speech model on this computer answers when it isn't set up.
+  if (backends.running("omni")) return { text: await transcribe(wav) };
+  return { text: await localTranscribe(wav) };
 });
+
+route("GET", "/api/dictation", () => dictationInfo({ refresh: true }));
 
 route("POST", "/api/speak", async (req, _, res) => {
   const { text, voice } = await json(req);
@@ -198,6 +203,12 @@ route("PATCH", "/api/settings", async (req) => {
   }
   const next = updateSettings(patch);
   for (const id of ["small", "omni"]) if (settings[`${id}Quant`] !== before[id]) backends.switchQuant(id);
+  // A different program or model changes what dictation can do.
+  if ("dictationBinary" in patch || "dictationModel" in patch) {
+    dictationInfo({ refresh: true })
+      .then((dictation) => bus.emit("dictation", { dictation }))
+      .catch(() => {});
+  }
   return next;
 });
 backends.readyHooks.push((id) => {
@@ -400,6 +411,10 @@ server.listen(PORT, HOST, () => {
     .startAll()
     .catch(() => {})
     .finally(() => backends.resume());
+  // Find the dictation program once, so the microphone knows what it can do before it's used.
+  dictationInfo()
+    .then((dictation) => bus.emit("dictation", { dictation }))
+    .catch(() => {});
   memory.tidy();
   updater.start(shutdown);
 });
