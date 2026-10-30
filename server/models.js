@@ -176,15 +176,17 @@ function localFile(input) {
     throw modelError(`${full} isn't on this computer.`, 404);
   }
   if (stat.isDirectory()) {
+    // A projector only feeds pictures or audio into a model; it can't chat by itself.
     const found = fs
       .readdirSync(full)
-      .filter((name) => /\.gguf$/i.test(name))
+      .filter((name) => /\.gguf$/i.test(name) && !/mmproj/i.test(name))
       .sort()
       .map((name) => path.join(full, name));
-    if (!found.length) throw modelError(`There are no GGUF files in ${full}.`, 404);
+    if (!found.length) throw modelError(`There are no GGUF chat models in ${full}.`, 404);
     return found.flatMap(localFile);
   }
   if (!/\.gguf$/i.test(full)) throw modelError(`${full} isn't a GGUF model.`, 400);
+  if (/mmproj/i.test(path.basename(full))) throw modelError(`${path.basename(full)} is a vision or audio projector, not a chat model.`, 422);
   return [full];
 }
 

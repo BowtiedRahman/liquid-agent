@@ -17,7 +17,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import zlib from "node:zlib";
-import { ggufVariants, parseHfLink, probeGGUF } from "../server/models.js";
+import { ggufVariants, localVariants, parseHfLink, probeGGUF } from "../server/models.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = Number(process.env.SMOKE_PORT ?? 8199);
@@ -101,6 +101,21 @@ const variants = ggufVariants(
   16,
 );
 check(variants.variants.length === 2 && variants.variants.some((v) => v.shards.length === 2), "it groups split GGUF files and skips projectors");
+
+// A folder of models on disk works the same way, and a projector is refused.
+const localDir = path.join(home, "local-models");
+fs.mkdirSync(localDir);
+fs.copyFileSync(fixtureFile, path.join(localDir, "keeper-Q4_K_M.gguf"));
+fs.copyFileSync(fixtureFile, path.join(localDir, "mmproj-skip-me.gguf"));
+const fromDir = localVariants([localDir]);
+check(fromDir.variants.length === 1 && fromDir.variants[0].label === "keeper", "it lists the chat models in a folder and skips the projector");
+let projector = "";
+try {
+  localVariants([path.join(localDir, "mmproj-skip-me.gguf")]);
+} catch (e) {
+  projector = e.message;
+}
+check(/projector/.test(projector), "it refuses a vision or audio projector on its own");
 
 /** Sends raw bytes and returns the response, for uploads and audio. */
 async function send(route, data, type, headers = {}) {

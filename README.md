@@ -14,6 +14,8 @@ A private AI agent for your Mac or Linux computer that runs **LFM3 1.7B** and **
 
 Everything stays on your computer. The only network traffic is the one-time downloads and web searches you ask for.
 
+**[Quickstart and how-to guide →](QUICKSTART.md)** — install, first run, using models you already have on disk, approvals, voice, troubleshooting.
+
 ## Install
 
 Paste this into Terminal on macOS, or a terminal on Linux:
