@@ -113,6 +113,7 @@ Notes:
 
 - With more than one model installed in Handy, the same row lets you pick which one Liquid Agent uses. Leaving it alone uses whichever model Handy has selected.
 - If **Eyes and ears** is running, it transcribes instead — it hears longer, messier audio better. Stop it in Downloads to hand dictation back to the local model.
+- **Keep takes under about 60–70 seconds.** Handy's batch path transcribes one take at a time and holds about a minute of speech per pass; a longer take comes back with only its start. For meeting-length audio, use Handy's own loop mode, which chunks long audio itself.
 - Voice chat and read-aloud still need Eyes and ears: they are a single model listening and talking at once, which a transcribe-only model can't do.
 
 ## Make it faster
