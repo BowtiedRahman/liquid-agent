@@ -874,7 +874,7 @@ class Backends {
         // text model gets one, so its whole context is available to a chat.
         const slots = custom ? 1 : 2;
         // Each request turns thinking on or off itself.
-        const args = ["--host", "127.0.0.1", "--port", port, "-c", String(context), "-np", String(slots), "-ngl", "99", "--reasoning", "auto"];
+        const args = ["--host", "127.0.0.1", "--port", port, "-c", String(context), "-np", String(slots), "-ngl", "99", "--reasoning", "auto", "-t", String(os.cpus().length)];
         if (custom?.meta?.hasTemplate !== false) args.push("--jinja");
         if (this.cpuOnly) args.push("--device", "none");
         if (id === "small") args.push("-m", custom ? customPath(variant.file) : weights("small"), "--alias", "LFM3-1.7B");
